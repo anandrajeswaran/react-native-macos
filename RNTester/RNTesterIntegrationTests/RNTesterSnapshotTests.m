@@ -1,9 +1,8 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
- *
  */
 
 #import <React/RCTUIKit.h> // TODO(macOS ISS#3536887)
@@ -11,8 +10,7 @@
 
 #import <RCTTest/RCTTestRunner.h>
 
-@interface RNTesterSnapshotTests : XCTestCase
-{
+@interface RNTesterSnapshotTests : XCTestCase {
   RCTTestRunner *_runner;
 }
 
@@ -33,23 +31,19 @@
   _runner.recordMode = NO;
 }
 
-#define RCT_TEST(name)                  \
-- (void)test##name                      \
-{                                       \
-  [_runner runTest:_cmd module:@#name]; \
-}
+#define RCT_TEST(name)                     \
+  -(void)test##name                        \
+  {                                        \
+    [_runner runTest:_cmd module:@ #name]; \
+  }
 
 RCT_TEST(ViewExample)
 RCT_TEST(LayoutExample)
-RCT_TEST(ARTExample)
 RCT_TEST(ScrollViewExample)
-#if !TARGET_OS_OSX // Reason: Intermittent failure: crash deallocating NSTextStorage of a TextView: tracked by https://github.com/microsoft/react-native-macos/issues/357
 RCT_TEST(TextExample)
-#endif
 #if !TARGET_OS_TV
-// No switch or slider available on tvOS
+// No switch available on tvOS
 RCT_TEST(SwitchExample)
-RCT_TEST(SliderExample)
 #endif
 
 - (void)testZZZNotInRecordMode

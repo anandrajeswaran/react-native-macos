@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -9,6 +9,7 @@
 
 #import "RCTAutoInsetsProtocol.h"
 #import "RCTBorderDrawing.h"
+#import "RCTFocusChangeEvent.h" // TODO(OSS Candidate ISS#2710739)
 #import "RCTConvert.h"
 #import "RCTLog.h"
 #import "RCTRootContentView.h" // TODO(macOS ISS#2323203)
@@ -108,6 +109,7 @@ static NSString *RCTRecursiveAccessibilityLabel(RCTUIView *view) // TODO(macOS I
 @implementation RCTView
 {
   RCTUIColor *_backgroundColor; // TODO(OSS Candidate ISS#2710739)
+  RCTEventDispatcher *_eventDispatcher; // TODO(OSS Candidate ISS#2710739)
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
   NSTrackingArea *_trackingArea;
   BOOL _hasMouseOver;
@@ -115,6 +117,16 @@ static NSString *RCTRecursiveAccessibilityLabel(RCTUIView *view) // TODO(macOS I
   NSMutableDictionary<NSString *, NSDictionary *> *accessibilityActionsNameMap;
   NSMutableDictionary<NSString *, NSDictionary *> *accessibilityActionsLabelMap;
 }
+
+// [TODO(OSS Candidate ISS#2710739)
+- (instancetype)initWithEventDispatcher:(RCTEventDispatcher *)eventDispatcher
+{
+  if ((self = [self initWithFrame:CGRectZero])) {
+    _eventDispatcher = eventDispatcher;
+  }
+  return self;
+}
+// ]TODO(OSS Candidate ISS#2710739)
 
 - (instancetype)initWithFrame:(CGRect)frame
 {
@@ -227,11 +239,13 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:unused)
 {
 #if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
   if ((self.accessibilityTraits & SwitchAccessibilityTrait) == SwitchAccessibilityTrait) {
-    for (NSString *state in self.accessibilityStates) {
-      if ([state isEqualToString:@"checked"]) {
-        return @"1";
-      } else if ([state isEqualToString:@"unchecked"]) {
-        return @"0";
+    for (NSString *state in self.accessibilityState) {
+      id val = self.accessibilityState[state];
+      if (!val) {
+        continue;
+      }
+      if ([state isEqualToString:@"checked"] && [val isKindOfClass:[NSNumber class]]) {
+        return [val boolValue] ? @"1" : @"0";
       }
     }
     for (NSString *state in self.accessibilityState) {
@@ -284,12 +298,6 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:unused)
   if (roleDescription) {
     [valueComponents addObject:roleDescription];
   }
-  for (NSString *state in self.accessibilityStates) {
-    NSString *stateDescription = state ? stateDescriptions[state] : nil;
-    if (stateDescription) {
-      [valueComponents addObject:stateDescription];
-    }
-  }
   for (NSString *state in self.accessibilityState) {
     id val = self.accessibilityState[state];
     if (!val) {
@@ -307,6 +315,25 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:unused)
     }
     if ([state isEqualToString:@"busy"] && [val isKindOfClass:[NSNumber class]] && [val boolValue]) {
       [valueComponents addObject:stateDescriptions[@"busy"]];
+    }
+  }
+  
+  // handle accessibilityValue
+
+  if (self.accessibilityValueInternal) {
+    id min = self.accessibilityValueInternal[@"min"];
+    id now = self.accessibilityValueInternal[@"now"];
+    id max = self.accessibilityValueInternal[@"max"];
+    id text = self.accessibilityValueInternal[@"text"];
+    if (text && [text isKindOfClass:[NSString class]]) {
+      [valueComponents addObject:text];
+    } else if ([min isKindOfClass:[NSNumber class]] &&
+        [now isKindOfClass:[NSNumber class]] &&
+        [max isKindOfClass:[NSNumber class]] &&
+        ([min intValue] < [max intValue]) &&
+        ([min intValue] <= [now intValue] && [now intValue] <= [max intValue])) {
+      int val = ([now intValue]*100)/([max intValue]-[min intValue]);
+      [valueComponents addObject:[NSString stringWithFormat:@"%d percent", val]];
     }
   }
   if (valueComponents.count > 0) {
@@ -426,8 +453,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:unused)
 {
   if ([self performAccessibilityAction:@"activate"]) {
     return YES;
-  }
-  else if (_onAccessibilityTap) {
+  } else if (_onAccessibilityTap) {
     _onAccessibilityTap(nil);
     return YES;
   } else {
@@ -710,21 +736,20 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:unused)
   }
 
   // If we've gained focus, notify listeners
-  if (self.onFocus != nil ) {
-    self.onFocus(nil);
-  }
+  [_eventDispatcher sendEvent:[RCTFocusChangeEvent focusEventWithReactTag:self.reactTag]];
+
   return YES;
 }
+
 - (BOOL)resignFirstResponder
 {
   if (![super resignFirstResponder]) {
     return NO;
   }
 
-  // If we've gained focus, notify listeners
-  if (self.onBlur != nil ) {
-    self.onBlur(nil);
-  }
+  // If we've lost focus, notify listeners
+  [_eventDispatcher sendEvent:[RCTFocusChangeEvent blurEventWithReactTag:self.reactTag]];
+
   return YES;
 }
 
@@ -897,6 +922,11 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x) {
   }
 
   RCTUpdateShadowPathForView(self);
+  
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+  // clipsToBounds is stubbed out on macOS because it's not part of NSView
+  layer.masksToBounds = self.clipsToBounds;
+#endif // ]TODO(macOS ISS#2323203)
 
   const RCTCornerRadii cornerRadii = [self cornerRadii];
   const UIEdgeInsets borderInsets = [self bordersAsInsets];

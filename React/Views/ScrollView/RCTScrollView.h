@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -22,6 +22,8 @@
 > // ]TODO(macOS ISS#2323203)
 
 - (instancetype)initWithEventDispatcher:(RCTEventDispatcher *)eventDispatcher NS_DESIGNATED_INITIALIZER;
+
+@property (nonatomic, readonly) RCTBridge *bridge;
 
 /**
  * The `RCTScrollView` may have at most one single subview. This will ensure
@@ -56,6 +58,7 @@
 @property (nonatomic, assign) BOOL snapToStart;
 @property (nonatomic, assign) BOOL snapToEnd;
 @property (nonatomic, copy) NSString *snapToAlignment;
+@property (nonatomic, assign) BOOL inverted;
 
 // NOTE: currently these event props are only declared so we can export the
 // event names to JS - we don't call the blocks directly because scroll events

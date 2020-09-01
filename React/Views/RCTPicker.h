@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -18,7 +18,9 @@
 @property (nonatomic, assign) NSInteger selectedIndex;
 
 @property (nonatomic, strong) RCTUIColor *color; // TODO(OSS Candidate ISS#2710739)
+#if !TARGET_OS_OSX // [TODO(OSS Candidate ISS#2710739) // NSControl defines font prop for macOS, but iOS superviews don't
 @property (nonatomic, strong) UIFont *font;
+#endif // ]TODO(OSS Candidate ISS#2710739)
 @property (nonatomic, assign) NSTextAlignment textAlign;
 
 @property (nonatomic, copy) RCTBubblingEventBlock onChange;

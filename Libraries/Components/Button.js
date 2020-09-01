@@ -21,6 +21,7 @@ const View = require('./View/View');
 const invariant = require('invariant');
 
 import type {PressEvent} from '../Types/CoreEventTypes';
+import type {FocusEvent, BlurEvent} from './TextInput/TextInput'; // TODO(OSS Candidate ISS#2710739)
 
 type ButtonProps = $ReadOnly<{|
   /**
@@ -100,6 +101,18 @@ type ButtonProps = $ReadOnly<{|
    * Used to locate this view in end-to-end tests.
    */
   testID?: ?string,
+
+  // [TODO(OSS Candidate ISS#2710739)
+  /**
+   * Handler to be called when the button receives key focus
+   */
+  onBlur?: ?(e: BlurEvent) => void,
+
+  /**
+   * Handler to be called when the button loses key focus
+   */
+  onFocus?: ?(e: FocusEvent) => void,
+  // ]TODO(OSS Candidate ISS#2710739)
 |}>;
 
 /**
@@ -147,6 +160,8 @@ class Button extends React.Component<ButtonProps> {
       nextFocusUp,
       disabled,
       testID,
+      onFocus, // TODO(OSS Candidate ISS#2710739)
+      onBlur, // TODO(OSS Candidate ISS#2710739)
     } = this.props;
     const buttonStyles = [styles.button];
     const textStyles = [styles.text];
@@ -160,11 +175,11 @@ class Button extends React.Component<ButtonProps> {
         buttonStyles.push({backgroundColor: color});
       }
     }
-    const accessibilityStates = [];
+    const accessibilityState = {};
     if (disabled) {
       buttonStyles.push(styles.buttonDisabled);
       textStyles.push(styles.textDisabled);
-      accessibilityStates.push('disabled');
+      accessibilityState.disabled = true;
     }
     invariant(
       typeof title === 'string',
@@ -179,7 +194,7 @@ class Button extends React.Component<ButtonProps> {
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint} // TODO(OSS Candidate ISS#2710739)
         accessibilityRole="button"
-        accessibilityStates={accessibilityStates}
+        accessibilityState={accessibilityState}
         hasTVPreferredFocus={hasTVPreferredFocus}
         nextFocusDown={nextFocusDown}
         nextFocusForward={nextFocusForward}
@@ -189,6 +204,8 @@ class Button extends React.Component<ButtonProps> {
         testID={testID}
         disabled={disabled}
         onPress={onPress}
+        onFocus={onFocus} // TODO(OSS Candidate ISS#2710739)
+        onBlur={onBlur} // TODO(OSS Candidate ISS#2710739)
         touchSoundDisabled={touchSoundDisabled}>
         <View style={buttonStyles}>
           <Text style={textStyles} disabled={disabled}>
@@ -213,7 +230,7 @@ const styles = StyleSheet.create({
   }),
   text: {
     textAlign: 'center',
-    padding: 8,
+    margin: 8,
     ...Platform.select({
       ios: {
         // iOS blue from https://developer.apple.com/ios/human-interface-guidelines/visual-design/color/

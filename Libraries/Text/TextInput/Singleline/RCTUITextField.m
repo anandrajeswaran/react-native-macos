@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -77,25 +77,18 @@
 
 @implementation RCTUITextField {
   RCTBackedTextFieldDelegateAdapter *_textInputDelegateAdapter;
+  NSDictionary<NSAttributedStringKey, id> *_defaultTextAttributes;
 }
 
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
 @dynamic delegate;
 
-static UIFont *defaultPlaceholderFont()
-{
-  return [UIFont systemFontOfSize:17];
-}
-
 static RCTUIColor *defaultPlaceholderTextColor()
 {
-  // Default placeholder color from UITextField.
-  return [RCTUIColor colorWithRed:0 green:0 blue:0.0980392 alpha:0.22];
+  return [NSColor placeholderTextColor];
 }
 
 #endif // ]TODO(macOS ISS#2323203)
-
-@synthesize reactTextAttributes = _reactTextAttributes;
 
 - (instancetype)initWithFrame:(CGRect)frame
 {
@@ -107,8 +100,10 @@ static RCTUIColor *defaultPlaceholderTextColor()
                                                object:self];
 
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
-    self.bordered = NO;
-    self.accessibilityRole = NSAccessibilityTextFieldRole;
+    [self setBordered:NO];
+    [self setAllowsEditingTextAttributes:YES];
+    [self setAccessibilityRole:NSAccessibilityTextFieldRole];
+    [self setBackgroundColor:[NSColor clearColor]];
 #endif // ]TODO(macOS ISS#2323203)
 
     _textInputDelegateAdapter = [[RCTBackedTextFieldDelegateAdapter alloc] initWithTextField:self];
@@ -117,14 +112,13 @@ static RCTUIColor *defaultPlaceholderTextColor()
   return self;
 }
 
-- (void)dealloc
-{
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
 - (void)_textDidChange
 {
   _textWasPasted = NO;
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+  [self setAttributedText:[[NSAttributedString alloc] initWithString:[self text]
+                                                          attributes:[self defaultTextAttributes]]];
+#endif // ]TODO(macOS ISS#2323203)
 }
 
 #pragma mark - Accessibility
@@ -227,58 +221,48 @@ static RCTUIColor *defaultPlaceholderTextColor()
   [self _updatePlaceholder];
 }
 
-- (void)setPlaceholderColor:(RCTUIColor *)placeholderColor // TODO(OSS Candidate ISS#2710739)
-{
-  _placeholderColor = placeholderColor;
-  [self _updatePlaceholder];
-}
-
 - (NSString*)placeholder // [TODO(macOS ISS#2323203)
 {
-#if !TARGET_OS_OSX 
+#if !TARGET_OS_OSX
   return super.placeholder;
 #else
   return self.placeholderAttributedString.string ?: self.placeholderString;
 #endif
 } // ]TODO(macOS ISS#2323203)
 
-- (void)setReactTextAttributes:(RCTTextAttributes *)reactTextAttributes
+- (void)setPlaceholderColor:(RCTUIColor *)placeholderColor // TODO(OSS Candidate ISS#2710739)
 {
-  if ([reactTextAttributes isEqual:_reactTextAttributes]) {
-    return;
-  }
-#if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
-  self.defaultTextAttributes = reactTextAttributes.effectiveTextAttributes;
-#endif // TODO(macOS ISS#2323203)
-  _reactTextAttributes = reactTextAttributes;
+  _placeholderColor = placeholderColor;
   [self _updatePlaceholder];
 }
 
-- (RCTTextAttributes *)reactTextAttributes
+- (void)setDefaultTextAttributes:(NSDictionary<NSAttributedStringKey, id> *)defaultTextAttributes
 {
-  return _reactTextAttributes;
+  _defaultTextAttributes = defaultTextAttributes;
+#if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
+  [super setDefaultTextAttributes:defaultTextAttributes];
+#endif // TODO(macOS ISS#2323203)
+  [self _updatePlaceholder];
+
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+  [self setAttributedText:[[NSAttributedString alloc] initWithString:[self text]
+                                                          attributes:[self defaultTextAttributes]]];
+#endif // ]TODO(macOS ISS#2323203)
+}
+
+- (NSDictionary<NSAttributedStringKey, id> *)defaultTextAttributes
+{
+  return _defaultTextAttributes;
 }
 
 - (void)_updatePlaceholder
 {
-  if (self.placeholder == nil) {
-    return;
-  }
-
-  NSMutableDictionary *attributes = [NSMutableDictionary new];
 #if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
-  if (_placeholderColor) {
-    [attributes setObject:_placeholderColor forKey:NSForegroundColorAttributeName];
-  }
-
-  self.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.placeholder
-                                                               attributes:attributes];
+  self.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.placeholder ?: @""
+                                                               attributes:[self _placeholderTextAttributes]];
 #else // [TODO(macOS ISS#2323203)
-  attributes[NSForegroundColorAttributeName] = _placeholderColor ?: defaultPlaceholderTextColor();
-  attributes[NSFontAttributeName] = self.font ?: defaultPlaceholderFont();
-  
-  self.placeholderAttributedString = [[NSAttributedString alloc] initWithString:self.placeholder
-                                                                     attributes:attributes];
+  self.placeholderAttributedString = [[NSAttributedString alloc] initWithString:self.placeholder ?: @""
+																	 attributes:[self _placeholderTextAttributes]];
 #endif // ]TODO(macOS ISS#2323203)
 }
 
@@ -308,29 +292,47 @@ static RCTUIColor *defaultPlaceholderTextColor()
   return NO;
 }
 
+- (void)setSecureTextEntry:(BOOL)secureTextEntry
+{
+  if (self.secureTextEntry == secureTextEntry) {
+    return;
+  }
+
+  [super setSecureTextEntry:secureTextEntry];
+
+  // Fix for trailing whitespate issue
+  // Read more:
+  // https://stackoverflow.com/questions/14220187/uitextfield-has-trailing-whitespace-after-securetextentry-toggle/22537788#22537788
+  NSAttributedString *originalText = [self.attributedText copy];
+  self.attributedText = [NSAttributedString new];
+  self.attributedText = originalText;
+}
+
+#endif // ]TODO(macOS ISS#2323203)
+
+
 #pragma mark - Placeholder
 
-- (NSDictionary<NSAttributedStringKey, id> *)placeholderEffectiveTextAttributes
+- (NSDictionary<NSAttributedStringKey, id> *)_placeholderTextAttributes
 {
-  NSMutableDictionary<NSAttributedStringKey, id> *effectiveTextAttributes = [NSMutableDictionary dictionary];
-  
-  if (_placeholderColor) {
-    effectiveTextAttributes[NSForegroundColorAttributeName] = _placeholderColor;
+  NSMutableDictionary<NSAttributedStringKey, id> *textAttributes = [_defaultTextAttributes mutableCopy] ?: [NSMutableDictionary new];
+
+  if (self.placeholderColor) {
+    [textAttributes setValue:self.placeholderColor forKey:NSForegroundColorAttributeName];
+  } else {
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+    [textAttributes setValue:defaultPlaceholderTextColor() forKey:NSForegroundColorAttributeName];
+#else
+    [textAttributes removeObjectForKey:NSForegroundColorAttributeName];
+#endif // ]TODO(macOS ISS#2323203)
   }
-  // Kerning
-  if (!isnan(_reactTextAttributes.letterSpacing)) {
-    effectiveTextAttributes[NSKernAttributeName] = @(_reactTextAttributes.letterSpacing);
-  }
-  
-  NSParagraphStyle *paragraphStyle = [_reactTextAttributes effectiveParagraphStyle];
-  if (paragraphStyle) {
-    effectiveTextAttributes[NSParagraphStyleAttributeName] = paragraphStyle;
-  }
-  
-  return [effectiveTextAttributes copy];
+
+  return textAttributes;
 }
 
 #pragma mark - Context Menu
+
+#if !TARGET_OS_OSX // [TODO(macOS ISS#2323203)
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender
 {
@@ -351,7 +353,6 @@ static RCTUIColor *defaultPlaceholderTextColor()
 
   return [super caretRectForPosition:position];
 }
-
 
 #pragma mark - Positioning Overrides
 
@@ -501,9 +502,8 @@ static RCTUIColor *defaultPlaceholderTextColor()
 {
   // Note: `placeholder` defines intrinsic size for `<TextInput>`.
   NSString *text = self.placeholder ?: @"";
-  
 #if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
-  CGSize size = [text sizeWithAttributes:[self placeholderEffectiveTextAttributes]];
+  CGSize size = [text sizeWithAttributes:[self _placeholderTextAttributes]];
   size = CGSizeMake(RCTCeilPixelValue(size.width), RCTCeilPixelValue(size.height));
 #else // [TODO(macOS ISS#2323203)
   CGSize size = [text sizeWithAttributes:@{NSFontAttributeName: self.font}];

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -10,7 +10,6 @@
 #import <React/RCTUIKit.h> // TODO(macOS ISS#2323203)
 
 #import "RCTConvert.h"
-#import "RCTEventDispatcher.h"
 #import "RCTLog.h"
 #import "RCTUIManager.h"
 #import "RCTUIManagerObserverCoordinator.h"
@@ -18,140 +17,12 @@
 #import "RCTUtils.h"
 #import "UIView+Private.h"
 #import "UIView+React.h"
+#import "RCTScrollEvent.h"
 
 
 #if !TARGET_OS_TV && !TARGET_OS_OSX // TODO(macOS ISS#2323203)
 #import "RCTRefreshControl.h"
 #endif
-
-@interface RCTScrollEvent : NSObject <RCTEvent>
-
-- (instancetype)initWithEventName:(NSString *)eventName
-                         reactTag:(NSNumber *)reactTag
-          scrollViewContentOffset:(CGPoint)scrollViewContentOffset
-           scrollViewContentInset:(UIEdgeInsets)scrollViewContentInset
-            scrollViewContentSize:(CGSize)scrollViewContentSize
-                  scrollViewFrame:(CGRect)scrollViewFrame
-              scrollViewZoomScale:(CGFloat)scrollViewZoomScale
-                         userData:(NSDictionary *)userData
-                    coalescingKey:(uint16_t)coalescingKey NS_DESIGNATED_INITIALIZER;
-
-@end
-
-@implementation RCTScrollEvent
-{
-  CGPoint _scrollViewContentOffset;
-  UIEdgeInsets _scrollViewContentInset;
-  CGSize _scrollViewContentSize;
-  CGRect _scrollViewFrame;
-  CGFloat _scrollViewZoomScale;
-  NSDictionary *_userData;
-  uint16_t _coalescingKey;
-  NSDictionary *_body; // TODO(OSS Candidate ISS#2710739)
-}
-
-@synthesize viewTag = _viewTag;
-@synthesize eventName = _eventName;
-
-- (instancetype)initWithEventName:(NSString *)eventName
-                         reactTag:(NSNumber *)reactTag
-          scrollViewContentOffset:(CGPoint)scrollViewContentOffset
-           scrollViewContentInset:(UIEdgeInsets)scrollViewContentInset
-            scrollViewContentSize:(CGSize)scrollViewContentSize
-                  scrollViewFrame:(CGRect)scrollViewFrame
-              scrollViewZoomScale:(CGFloat)scrollViewZoomScale
-                         userData:(NSDictionary *)userData
-                    coalescingKey:(uint16_t)coalescingKey
-{
-  RCTAssertParam(reactTag);
-
-  if ((self = [super init])) {
-    _eventName = [eventName copy];
-    _viewTag = reactTag;
-    _scrollViewContentOffset = scrollViewContentOffset;
-    _scrollViewContentInset = scrollViewContentInset;
-    _scrollViewContentSize = scrollViewContentSize;
-    _scrollViewFrame = scrollViewFrame;
-    _scrollViewZoomScale = scrollViewZoomScale;
-    _userData = userData;
-    _coalescingKey = coalescingKey;
-    _body = [self body]; // TODO(OSS Candidate ISS#2710739)
-  }
-  return self;
-}
-
-RCT_NOT_IMPLEMENTED(- (instancetype)init)
-
-- (uint16_t)coalescingKey
-{
-  return _coalescingKey;
-}
-
-- (NSDictionary *)body
-{
-  NSDictionary *body = @{
-    @"contentOffset": @{
-      @"x": @(_scrollViewContentOffset.x),
-      @"y": @(_scrollViewContentOffset.y)
-    },
-    @"contentInset": @{
-      @"top": @(_scrollViewContentInset.top),
-      @"left": @(_scrollViewContentInset.left),
-      @"bottom": @(_scrollViewContentInset.bottom),
-      @"right": @(_scrollViewContentInset.right)
-    },
-    @"contentSize": @{
-      @"width": @(_scrollViewContentSize.width),
-      @"height": @(_scrollViewContentSize.height)
-    },
-    @"layoutMeasurement": @{
-      @"width": @(_scrollViewFrame.size.width),
-      @"height": @(_scrollViewFrame.size.height)
-    },
-    @"zoomScale": @(_scrollViewZoomScale ?: 1),
-  };
-
-  if (_userData) {
-    NSMutableDictionary *mutableBody = [body mutableCopy];
-    [mutableBody addEntriesFromDictionary:_userData];
-    body = mutableBody;
-  }
-
-  return body;
-}
-
-- (BOOL)canCoalesce
-{
-  return YES;
-}
-
-- (RCTScrollEvent *)coalesceWithEvent:(RCTScrollEvent *)newEvent
-{
-  NSArray<NSDictionary *> *updatedChildFrames = [_userData[@"updatedChildFrames"] arrayByAddingObjectsFromArray:newEvent->_userData[@"updatedChildFrames"]];
-  if (updatedChildFrames) {
-    NSMutableDictionary *userData = [newEvent->_userData mutableCopy];
-    userData[@"updatedChildFrames"] = updatedChildFrames;
-    newEvent->_userData = userData;
-  }
-
-  return newEvent;
-}
-
-+ (NSString *)moduleDotMethod
-{
-  return @"RCTEventEmitter.receiveEvent";
-}
-
-- (NSArray *)arguments
-{
-  // TODO: Revisit when FB issues their Main Thread Checker fix.
-  // Previously this called [self body], which in turn calls view-related methods.
-  // Because the arguments method is called from a background thread, we now return
-  // the cached metrics from _body to avoid calling main-thread-specific methods.
-  return @[self.viewTag, RCTNormalizeInputEventName(self.eventName), _body]; // TODO(OSS Candidate ISS#2710739)
-}
-
-@end
 
 /**
  * Include a custom scroll view subclass because we want to limit certain
@@ -177,7 +48,6 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 #endif // ]TODO(macOS ISS#2323203)
 @end
 
-
 @implementation RCTCustomScrollView
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -187,7 +57,6 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     self.scrollEnabled = YES;
     self.hasHorizontalScroller = YES;
     self.hasVerticalScroller = YES;
-    self.autohidesScrollers = YES;
     self.panGestureRecognizer = [[NSPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleCustomPan:)];
 #else // ]TODO(macOS ISS#2323203)
     [self.panGestureRecognizer addTarget:self action:@selector(handleCustomPan:)];
@@ -566,6 +435,11 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   }
 }
 
+- (RCTBridge *)bridge
+{
+  return [_eventDispatcher bridge];
+}
+
 - (RCTUIView *)contentView // TODO(macOS ISS#3536887)
 {
   return _scrollView.documentView;
@@ -751,6 +625,11 @@ static inline void RCTApplyTransformationAccordingLayoutDirection(RCTPlatformVie
     [self react_updateClippedSubviewsWithClipRect:clipRect relativeToView:clipView];
     _lastClippedToRect = bounds;
   }
+
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+  [[self scrollView] setHasHorizontalScroller:[self isHorizontal:_scrollView]];
+  [[self scrollView] setHasVerticalScroller:[self isVertical:_scrollView]];
+#endif // ]TODO(macOS ISS#2323203)
 }
 
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
@@ -807,6 +686,13 @@ static inline void RCTApplyTransformationAccordingLayoutDirection(RCTPlatformVie
 {
   return scrollView.contentSize.width > self.frame.size.width;
 }
+
+#if TARGET_OS_OSX // [TODO(macOS Candidate ISS#2710739)
+- (BOOL)isVertical:(RCTCustomScrollView *)scrollView
+{
+  return scrollView.contentSize.height > self.frame.size.height;
+}
+#endif // ]TODO(macOS Candidate ISS#2710739)
 
 - (void)scrollToOffset:(CGPoint)offset
 {
@@ -1215,6 +1101,12 @@ RCT_SCROLL_EVENT_HANDLER(scrollViewDidScrollToTop, onScrollToTop)
       return NO;
     }
   }
+
+  if (self.inverted) {
+    [self scrollToEnd:YES];
+    return NO;
+  }
+
   return YES;
 }
 

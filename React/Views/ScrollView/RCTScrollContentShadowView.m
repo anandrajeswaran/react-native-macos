@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -9,9 +9,27 @@
 
 #import <yoga/Yoga.h>
 
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+#import "RCTScrollContentLocalData.h"
+#endif // ]TODO(macOS ISS#2323203)
+
 #import "RCTUtils.h"
 
 @implementation RCTScrollContentShadowView
+
+#if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+- (void)setLocalData:(RCTScrollContentLocalData *)localData
+{
+  RCTAssert(
+      [localData isKindOfClass:[RCTScrollContentLocalData class]],
+      @"Local data object for `RCTScrollContentView` must be `RCTScrollContentLocalData` instance.");
+
+  super.marginEnd = (YGValue){localData.verticalScrollerWidth, YGUnitPoint};
+  super.marginBottom = (YGValue){localData.horizontalScrollerHeight, YGUnitPoint};
+
+  [self didSetProps:@[@"marginEnd", @"marginBottom"]];
+}
+#endif // ]TODO(macOS ISS#2323203)
 
 - (void)layoutWithMetrics:(RCTLayoutMetrics)layoutMetrics
             layoutContext:(RCTLayoutContext)layoutContext

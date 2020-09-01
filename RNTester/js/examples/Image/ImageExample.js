@@ -15,6 +15,7 @@ const React = require('react');
 const {
   ActivityIndicator,
   Image,
+  Platform, // TODO(OSS Candidate ISS#2710739)
   StyleSheet,
   Text,
   View,
@@ -26,7 +27,7 @@ const base64Icon =
 
 const ImageCapInsetsExample = require('./ImageCapInsetsExample');
 const IMAGE_PREFETCH_URL =
-  'http://origami.design/public/images/bird-logo.png?r=1&t=' + Date.now();
+  'https://www.facebook.com/favicon.ico?r=1&t=' + Date.now();
 const prefetchTask = Image.prefetch(IMAGE_PREFETCH_URL);
 
 type ImageSource = $ReadOnly<{|
@@ -312,18 +313,17 @@ class MultipleSourcesExample extends React.Component<
             style={{flex: 1}}
             source={[
               {
-                uri: 'https://facebook.github.io/react-native/img/favicon.png',
+                uri: 'https://www.facebook.com/favicon.ico',
                 width: 38,
                 height: 38,
               },
               {
-                uri: 'https://facebook.github.io/react-native/img/favicon.png',
+                uri: 'https://www.facebook.com/favicon.ico',
                 width: 76,
                 height: 76,
               },
               {
-                uri:
-                  'https://facebook.github.io/react-native/img/opengraph.png',
+                uri: 'https://www.facebook.com/ads/pics/successstories.png',
                 width: 400,
                 height: 400,
               },
@@ -336,10 +336,10 @@ class MultipleSourcesExample extends React.Component<
 }
 
 const fullImage = {
-  uri: 'https://facebook.github.io/react-native/img/opengraph.png',
+  uri: 'https://www.facebook.com/ads/pics/successstories.png',
 };
 const smallImage = {
-  uri: 'https://facebook.github.io/react-native/img/favicon.png',
+  uri: 'https://www.facebook.com/favicon.ico',
 };
 
 const styles = StyleSheet.create({
@@ -448,9 +448,7 @@ exports.examples = [
       return (
         <NetworkImageCallbackExample
           source={{
-            uri:
-              'http://origami.design/public/images/bird-logo.png?r=1&t=' +
-              Date.now(),
+            uri: 'https://www.facebook.com/favicon.ico?r=1&t=' + Date.now(),
           }}
           prefetchedSource={{uri: IMAGE_PREFETCH_URL}}
         />
@@ -463,12 +461,12 @@ exports.examples = [
       return (
         <NetworkImageExample
           source={{
-            uri: 'https://TYPO_ERROR_facebook.github.io/react/logo-og.png',
+            uri: 'https://www.facebook.com/favicon_TYPO.ico',
           }}
         />
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Image Download Progress',
@@ -476,12 +474,12 @@ exports.examples = [
       return (
         <NetworkImageExample
           source={{
-            uri: 'http://origami.design/public/images/bird-logo.png?r=1',
+            uri: 'https://www.facebook.com/favicon.ico?r=1',
           }}
         />
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'defaultSource',
@@ -491,13 +489,13 @@ exports.examples = [
         <Image
           defaultSource={require('../../assets/bunny.png')}
           source={{
-            uri: 'https://facebook.github.io/origami/public/images/birds.jpg',
+            uri: 'https://origami.design/public/images/bird-logo.png',
           }}
           style={styles.base}
         />
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Cache Policy',
@@ -526,7 +524,7 @@ exports.examples = [
         </View>
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Border Color',
@@ -835,7 +833,7 @@ exports.examples = [
         />
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Base64 image',
@@ -844,7 +842,7 @@ exports.examples = [
         <Image style={styles.base64} source={{uri: base64Icon, scale: 3}} />
       );
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Cap Insets',
@@ -855,7 +853,7 @@ exports.examples = [
     render: function(): React.Node {
       return <ImageCapInsetsExample />;
     },
-    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
+    platform: 'ios',
   },
   {
     title: 'Image Size',
@@ -888,7 +886,8 @@ exports.examples = [
           <Image
             source={{
               uri: 'ImageInBundle',
-              bundle: 'RNTesterBundle',
+              bundle:
+                'RNTesterBundle' + (Platform.OS === 'macos' ? '-macOS' : ''),
               width: 100,
               height: 100,
             }}
@@ -897,7 +896,8 @@ exports.examples = [
           <Image
             source={{
               uri: 'ImageInAssetCatalog',
-              bundle: 'RNTesterBundle',
+              bundle:
+                'RNTesterBundle' + (Platform.OS === 'macos' ? '-macOS' : ''),
               width: 100,
               height: 100,
             }}
@@ -906,38 +906,8 @@ exports.examples = [
         </View>
       );
     },
-    platform: 'ios',
+    platform: ['ios', 'macos'], // TODO(OSS Candidate ISS#2710739)
   },
-  {
-    /* [TODO(OSS Candidate ISS#2710739) */
-    title: 'Bundled images',
-    description: 'Images shipped in a separate native bundle',
-    render: function() {
-      return (
-        <View style={{flexDirection: 'row'}}>
-          <Image
-            source={{
-              uri: 'ImageInBundle',
-              bundle: 'RNTesterBundle-macOS',
-              width: 100,
-              height: 100,
-            }}
-            style={{borderColor: 'yellow', borderWidth: 4}}
-          />
-          <Image
-            source={{
-              uri: 'ImageInAssetCatalog',
-              bundle: 'RNTesterBundle-macOS',
-              width: 100,
-              height: 100,
-            }}
-            style={{marginLeft: 10, borderColor: 'blue', borderWidth: 4}}
-          />
-        </View>
-      );
-    },
-    platform: 'macos',
-  } /* TODO(OSS Candidate ISS#2710739) */,
   {
     title: 'Blur Radius',
     render: function(): React.Node {
