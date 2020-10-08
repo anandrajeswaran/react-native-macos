@@ -5,9 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import <React/RCTUIKit.h> // TODO(macOS ISS#2323203)
+#import <React-Core/React/RCTUIKit.h> // TODO(macOS ISS#2323203)
 
-#import <React/RCTBridge.h>
+@class RCTBridge; // TODO(macOS: Forward declare instead of including so clients don't need to copy all of our search paths
 
 @protocol RCTRootViewDelegate;
 

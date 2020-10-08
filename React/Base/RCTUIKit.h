@@ -9,8 +9,6 @@
 
 #include <TargetConditionals.h>
 
-#include <React/RCTAssert.h>
-
 #if !TARGET_OS_OSX
 
 #import <UIKit/UIKit.h>
@@ -76,11 +74,6 @@ UIKIT_STATIC_INLINE BOOL RCTUIViewSetClipsToBounds(RCTPlatformView *view)
 UIKIT_STATIC_INLINE void RCTUIViewSetContentModeRedraw(UIView *view)
 {
   view.contentMode = UIViewContentModeRedraw;
-}
-
-UIKIT_STATIC_INLINE BOOL RCTUIViewDrawViewHierarchyInRectAfterScreenUpdates(RCTPlatformView *view, CGRect rect, BOOL afterUpdates)
-{
-  return [view drawViewHierarchyInRect:rect afterScreenUpdates:afterUpdates];
 }
 
 UIKIT_STATIC_INLINE BOOL RCTUIViewIsDescendantOfView(RCTPlatformView *view, RCTPlatformView *parent)
@@ -429,14 +422,6 @@ BOOL RCTUIViewSetClipsToBounds(RCTPlatformView *view);
 NS_INLINE void RCTUIViewSetContentModeRedraw(RCTPlatformView *view)
 {
   view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
-}
-
-NS_INLINE BOOL RCTUIViewDrawViewHierarchyInRectAfterScreenUpdates(RCTPlatformView *view, CGRect rect, __unused BOOL afterUpdates)
-{
-  RCTAssert(afterUpdates, @"We're redrawing the view so it will necessarily include the latest changes.");
-  (void) afterUpdates;
-  [view displayRectIgnoringOpacity:NSRectToCGRect(rect)];
-  return YES;
 }
 
 NS_INLINE BOOL RCTUIViewIsDescendantOfView(RCTPlatformView *view, RCTPlatformView *parent)
