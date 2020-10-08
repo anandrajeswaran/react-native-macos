@@ -9,9 +9,10 @@
 #import <React/RCTUIManager.h>
 #import <React/RCTUtils.h>
 #import <ReactCommon/RCTTurboModuleManager.h>
-#import <ReactCommon/TurboModuleUtils.h>
+#import <NativeModules.h>
+#import <TurboModulesProvider.h>
 
-static NSImage* TakeScreenshot()
+static NSImage* TakeScreenshotAsImage()
 {
   // find the key window
   NSWindow* keyWindow;
@@ -33,6 +34,7 @@ static NSImage* TakeScreenshot()
     windowID,
     imageOptions);
   NSImage* image = [[NSImage alloc] initWithCGImage:windowImage size:[keyWindow frame].size];
+  CGImageRelease(windowImage);
   
   return image;
 }
@@ -55,76 +57,60 @@ static NSString* SaveScreenshotToTempFile(NSImage* image)
   return tempFilePath;
 }
 
-class ScreenshotManagerTurboModule : public facebook::react::TurboModule
+REACT_STRUCT(ScreenshotArguments)
+struct ScreenshotArguments
 {
-public:
-  ScreenshotManagerTurboModule(std::shared_ptr<facebook::react::CallInvoker> jsInvoker)
-    :facebook::react::TurboModule("ScreenshotManager", jsInvoker)
+};
+
+REACT_MODULE(ScreenshotManagerCxx, L"ScreenshotManager")
+struct ScreenshotManagerCxx
+{
+  winrt::Microsoft::ReactNative::ReactContext _reactContext;
+  
+  REACT_INIT(Initialize)
+  void Initialize(const winrt::Microsoft::ReactNative::ReactContext& reactContext) noexcept
   {
+    _reactContext = reactContext;
   }
   
-  facebook::jsi::Value get(
-    facebook::jsi::Runtime& runtime,
-    const facebook::jsi::PropNameID& propName
-  ) override
+  REACT_METHOD(TakeScreenshot, L"takeScreenshot")
+  void TakeScreenshot(
+                      std::string,
+                      ScreenshotArguments&&,
+                      winrt::Microsoft::ReactNative::ReactPromise<std::string> result
+                      ) noexcept
   {
-    auto jsInvoker = jsInvoker_;
-    auto key = propName.utf8(runtime);
-    if (key == "takeScreenshot")
+    _reactContext.UIDispatcher().Post([this, result]
     {
-      return facebook::jsi::Function::createFromHostFunction(
-        runtime,
-        propName,
-        0,
-        [jsInvoker](
-          facebook::jsi::Runtime& runtime,
-          const facebook::jsi::Value& thisVal,
-          const facebook::jsi::Value *args,
-          size_t count)
-        {
-          return facebook::react::createPromiseAsJSIValue(
-            runtime,
-            [jsInvoker](facebook::jsi::Runtime& runtime, std::shared_ptr<facebook::react::Promise> promise)
-            {
-              // ignore arguments, assume to be ('window', {format: 'jpeg', quality: 0.8})
-
-              dispatch_async(dispatch_get_main_queue(), ^{
-                NSImage* screenshotImage = TakeScreenshot();
-                jsInvoker->invokeAsync([screenshotImage, &runtime, promise]()
-                {
-                  NSString* tempFilePath = SaveScreenshotToTempFile(screenshotImage);
-                  promise->resolve(facebook::jsi::Value(
-                    runtime,
-                    facebook::jsi::String::createFromUtf8(
-                      runtime,
-                      std::string([tempFilePath UTF8String])
-                      )
-                    ));
-                });
-              });
-            }
-          );
-        }
-      );
-    }
-    else
-    {
-      return facebook::jsi::Value::undefined();
-    }
+      NSImage* screenshotImage = TakeScreenshotAsImage();
+      _reactContext.JSDispatcher().Post([screenshotImage, result]()
+      {
+        NSString* tempFilePath = SaveScreenshotToTempFile(screenshotImage);
+        result.Resolve([tempFilePath UTF8String]);
+      });
+    });
   }
 };
 
-@implementation ScreenshotManagerTurboModuleManagerDelegate
+@implementation ScreenshotManagerTurboModuleManagerDelegate {
+  std::shared_ptr<winrt::Microsoft::ReactNative::TurboModulesProvider> _provider;
+}
 
 - (std::shared_ptr<facebook::react::TurboModule>)
   getTurboModule:(const std::string &)name
   jsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
 {
-  if (name == "ScreenshotManager")
+  if (!_provider)
   {
-    return std::make_shared<ScreenshotManagerTurboModule>(jsInvoker);
+    _provider = std::make_shared<winrt::Microsoft::ReactNative::TurboModulesProvider>();
+    _provider->SetReactContext(winrt::Microsoft::ReactNative::CreateMacOSReactContext(jsInvoker));
+    
+    _provider->AddModuleProvider(
+      L"ScreenshotManager",
+      winrt::Microsoft::ReactNative::MakeModuleProvider<ScreenshotManagerCxx>()
+      );
   }
-  return nullptr;
+  return _provider->getModule(name, jsInvoker);
 }
 
 
@@ -133,11 +119,7 @@ public:
   instance:(id<RCTTurboModule>)instance
   jsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
 {
-  if (name == "ScreenshotManager")
-  {
-    return std::make_shared<ScreenshotManagerTurboModule>(jsInvoker);
-  }
-  return nullptr;
+  return [self getTurboModule:name jsInvoker:jsInvoker];
 }
 
 @end

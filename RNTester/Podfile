@@ -1,41 +1,6 @@
-# [TODO(macOS GH#217)
-#
-# This monkey-patching of the CocoaPods Specification class will strip our MS versions from the specifications and
-# replace them with `1000.0.0`, which is the version that upstream always has set in `master`.
-module StripMSVersion
-  require 'cocoapods-core/specification'
-  Pod::Specification.prepend(self)
-
-  def source=(source)
-    if source.is_a?(Hash) && source.has_key?(:tag)
-      super(source.merge(:tag => StripMSVersion.strip(source[:tag])))
-    else
-      super
-    end
-  end
-
-  def version=(version)
-    super(StripMSVersion.strip(version))
-  end
-
-  def dependency(dep, *args)
-    version, *other_version_requirements = args
-    super(dep, *[StripMSVersion.strip(version), *other_version_requirements].compact)
-  end
-
-  private
-
-  CURRENT_VERSION = JSON.parse(File.read('../package.json'))['version']
-
-  def self.strip(version)
-    version && (version == CURRENT_VERSION ? '1000.0.0' : version)
-  end
-end
-# ]TODO(macOS GH#214)
-
+require_relative '../scripts/react_native_pods'
 source 'https://cdn.cocoapods.org/'
-
-require_relative '../scripts/autolink-ios'
+platform :ios, '10.0'
 
 # TODO(macOS GH#214)
 # Otherwise duplicate UUIDs are being generated between the iOS and macOS targets.
@@ -57,12 +22,13 @@ def pods(options = {})
   pod 'React-ART', :path => '../Libraries/ART'
   pod 'React-RCTPushNotification', :path => '../Libraries/PushNotificationIOS'
   pod 'Yoga',:path => '../ReactCommon/yoga', :modular_headers => true
+  pod 'React-TurboModuleCxx-WinRTPort', :path => '../ReactTurboModuleCxx'
+  pod 'React-TurboModuleCxx-RNW', :podspec => '../ReactTurboModuleCxx/React-TurboModuleCxx-RNW.podspec'
   # Additional Pods which are classed as unstable
   #
   # To use fabric: add `fabric_enabled` option to the use_react_native method above, like below
   # use_react_native!(path: "..", fabric_enabled: true)
 end
-
 
 def flipper_pods()
   flipperkit_version = '0.30.1'
@@ -73,16 +39,16 @@ def flipper_pods()
   pod 'FlipperKit/FlipperKitReactPlugin', '~>' + flipperkit_version, :configuration => 'Debug'
 
   if ENV['USE_FRAMEWORKS'] == '1'
-    $static_framework = ['FlipperKit', 'Flipper', 'Flipper-Folly',
+    static_frameworks = ['FlipperKit', 'Flipper', 'Flipper-Folly',
         'CocoaAsyncSocket', 'ComponentKit', 'Flipper-DoubleConversion',
         'Flipper-Glog', 'Flipper-PeerTalk', 'Flipper-RSocket',
         'CocoaLibEvent', 'OpenSSL-Universal', 'boost-for-react-native']
-
+  
     pre_install do |installer|
       Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
       installer.pod_targets.each do |pod|
-          if $static_framework.include?(pod.name)
-            def pod.build_type;
+          if static_frameworks.include?(pod.name)
+            def pod.build_type
               Pod::Target::BuildType.static_library
             end
           end
@@ -110,53 +76,54 @@ def flipper_post_install(installer)
 end
 
 target 'RNTester' do
-  platform :ios, '9.0'
+  platform :ios, '10.0'
   pods()
   flipper_pods()
+  # use_flipper!
 end
 
 target 'RNTester-macOS' do
-  platform :osx, '10.13'
+  platform :osx, '10.14'
   pods(:hermes_enabled => true)
 end
 
 target 'RNTesterUnitTests' do
-  platform :ios, '9.0'
+  platform :ios, '10.0'
   pods()
-  pod 'React-RCTTest', :path => "RCTTest"
+  pod 'React-RCTTest', :path => "./RCTTest"
 end
 
 target 'RNTester-macOSUnitTests' do
-  platform :osx, '10.13'
+  platform :osx, '10.14'
   pods()
-  pod 'React-RCTTest', :path => "RCTTest"
+  pod 'React-RCTTest', :path => "./RCTTest"
 end
 
 target 'RNTesterIntegrationTests' do
-  platform :ios, '9.0'
+  platform :ios, '10.0'
   pods()
-  pod 'React-RCTTest', :path => "RCTTest"
+  pod 'React-RCTTest', :path => "./RCTTest"
 end
 
 target 'RNTester-macOSIntegrationTests' do
-  platform :osx, '10.13'
+  platform :osx, '10.14'
   pods()
-  pod 'React-RCTTest', :path => "RCTTest"
+  pod 'React-RCTTest', :path => "./RCTTest"
 end
 
 # [TODO(macOS ISS#2323203): these are special targets used by the internal Microsoft build pipeline
 target 'iosDeviceBuild' do
-  platform :ios, '9.0'
+  platform :ios, '10.0'
   pods()
 end
 
 target 'iosSimulatorBuild' do
-  platform :ios, '9.0'
+  platform :ios, '10.0'
   pods()
 end
 
 target 'macOSBuild' do
-  platform :osx, '10.13'
+  platform :osx, '10.14'
   pods()
 end
 # ]TODO(macOS ISS#2323203)

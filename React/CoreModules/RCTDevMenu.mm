@@ -140,7 +140,7 @@ RCT_EXPORT_MODULE()
                                                object:nil];
     _extraMenuItems = [NSMutableArray new];
 
-#if TARGET_OS_SIMULATOR
+#if TARGET_OS_SIMULATOR || TARGET_OS_MACCATALYST
     RCTKeyCommands *commands = [RCTKeyCommands sharedInstance];
     __weak __typeof(self) weakSelf = self;
 
@@ -179,7 +179,8 @@ RCT_EXPORT_MODULE()
   _presentedItems = nil;
 #if !TARGET_OS_OSX // TODO(macOS ISS#2323203)
   [_actionSheet dismissViewControllerAnimated:YES
-                                   completion:^(void){}];
+                                   completion:^(void){
+                                   }];
 #endif // TODO(macOS ISS#2323203)
 }
 
@@ -279,27 +280,11 @@ RCT_EXPORT_MODULE()
     } else {
       [items addObject:[RCTDevMenuItem
                            buttonItemWithTitleBlock:^NSString * {
-                             if (devSettings.isNuclideDebuggingAvailable) {
-                               return devSettings.isDebuggingRemotely ? @"Stop Chrome Debugger" : @"Debug with Chrome";
-                             } else {
-                               return devSettings.isDebuggingRemotely ? @"Stop Debugging" : @"Debug";
-                             }
+                             return devSettings.isDebuggingRemotely ? @"Stop Debugging" : @"Debug";
                            }
                            handler:^{
                              devSettings.isDebuggingRemotely = !devSettings.isDebuggingRemotely;
                            }]];
-    }
-
-    if (devSettings.isNuclideDebuggingAvailable && !devSettings.isDebuggingRemotely) {
-      [items addObject:[RCTDevMenuItem buttonItemWithTitle:@"Debug with Nuclide"
-                                                   handler:^{
-#if RCT_ENABLE_INSPECTOR && !TARGET_OS_OSX // TODO(macOS ISS#2323203) - No RCTPresentedViewController on macOS
-                                                     [RCTInspectorDevServerHelper
-                                                         attachDebugger:@"ReactNative"
-                                                          withBundleURL:bridge.bundleURL
-                                                               withView:RCTPresentedViewController()];
-#endif
-                                                   }]];
     }
   }
 
@@ -484,42 +469,43 @@ RCT_EXPORT_METHOD(show)
   [NSMenu popUpContextMenu:menu withEvent:event forView:[window contentView]];
 #endif // ]TODO(macOS ISS#2323203)
 
-  [_bridge enqueueJSCall:@"RCTNativeAppEventEmitter"
-                  method:@"emit"
-                    args:@[@"RCTDevMenuShown"]
-              completion:NULL];
+  [_bridge enqueueJSCall:@"RCTNativeAppEventEmitter" method:@"emit" args:@[ @"RCTDevMenuShown" ] completion:NULL];
 }
 
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
 - (NSMenu *)menu
 {
   NSMenu *menu = nil;
-  if (_bridge) {
-    NSString *desc = _bridge.bridgeDescription;
-    if (desc.length == 0) {
-      desc = NSStringFromClass([_bridge class]);
+  if ([_bridge.devSettings isSecondaryClickToShowDevMenuEnabled]) {
+    NSMenu *menu = nil;
+    if (_bridge) {
+      NSString *desc = _bridge.bridgeDescription;
+      if (desc.length == 0) {
+        desc = NSStringFromClass([_bridge class]);
+      }
+      NSString *title = [NSString stringWithFormat:@"React Native: Development\n(%@)", desc];
+
+      menu = [[NSMenu alloc] init];
+
+      NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc]initWithString:title];
+      [attributedTitle setAttributes: @{ NSFontAttributeName : [NSFont menuFontOfSize:0] } range: NSMakeRange(0, [attributedTitle length])];
+      NSMenuItem *titleItem = [[NSMenuItem alloc] init];
+      [titleItem setAttributedTitle:attributedTitle];
+      [menu addItem:titleItem];
+
+      [menu addItem:[NSMenuItem separatorItem]];
+
+      NSArray<RCTDevMenuItem *> *items = [self _menuItemsToPresent];
+      for (RCTDevMenuItem *item in items) {
+        NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:[item title] action:@selector(menuItemSelected:) keyEquivalent:@""];
+        [menuItem setTarget:self];
+        [menuItem setRepresentedObject:item];
+        [menu addItem:menuItem];
+      }
     }
-    NSString *title = [NSString stringWithFormat:@"React Native: Development\n(%@)", desc];
-
-    menu = [[NSMenu alloc] init];
-
-    NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc]initWithString:title];
-    [attributedTitle setAttributes: @{ NSFontAttributeName : [NSFont menuFontOfSize:0] } range: NSMakeRange(0, [attributedTitle length])];
-    NSMenuItem *titleItem = [[NSMenuItem alloc] init];
-    [titleItem setAttributedTitle:attributedTitle];
-    [menu addItem:titleItem];
-
-    [menu addItem:[NSMenuItem separatorItem]];
-
-    NSArray<RCTDevMenuItem *> *items = [self _menuItemsToPresent];
-    for (RCTDevMenuItem *item in items) {
-      NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:[item title] action:@selector(menuItemSelected:) keyEquivalent:@""];
-      [menuItem setTarget:self];
-      [menuItem setRepresentedObject:item];
-      [menu addItem:menuItem];
-    }
+    return menu;
   }
-  return menu;
+  return nil;
 }
 
 -(void)menuItemSelected:(id)sender
@@ -527,6 +513,11 @@ RCT_EXPORT_METHOD(show)
   NSMenuItem *menuItem = (NSMenuItem *)sender;
   RCTDevMenuItem *item = (RCTDevMenuItem *)[menuItem representedObject];
   [item callHandler];
+}
+
+- (void)setSecondaryClickToShow:(BOOL)secondaryClickToShow
+{
+  _bridge.devSettings.isSecondaryClickToShowDevMenuEnabled = secondaryClickToShow;
 }
 
 #else // ]TODO(macOS ISS#2323203)
@@ -592,16 +583,19 @@ RCT_EXPORT_METHOD(setHotLoadingEnabled : (BOOL)enabled)
   return _bridge.devSettings.isHotLoadingEnabled;
 }
 
-- (std::shared_ptr<facebook::react::TurboModule>)getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+- (std::shared_ptr<facebook::react::TurboModule>)
+    getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+                  nativeInvoker:(std::shared_ptr<facebook::react::CallInvoker>)nativeInvoker
+                     perfLogger:(id<RCTTurboModulePerformanceLogger>)perfLogger
 {
-  return std::make_shared<facebook::react::NativeDevMenuSpecJSI>(self, jsInvoker);
+  return std::make_shared<facebook::react::NativeDevMenuSpecJSI>(self, jsInvoker, nativeInvoker, perfLogger);
 }
 
 @end
 
 #else // Unavailable when not in dev mode
 
-@interface RCTDevMenu() <NativeDevMenuSpec>
+@interface RCTDevMenu () <NativeDevMenuSpec>
 @end
 
 @implementation RCTDevMenu
@@ -619,7 +613,7 @@ RCT_EXPORT_METHOD(setHotLoadingEnabled : (BOOL)enabled)
 {
 }
 
-- (void)debugRemotely : (BOOL)enableDebug
+- (void)debugRemotely:(BOOL)enableDebug
 {
 }
 
@@ -632,9 +626,12 @@ RCT_EXPORT_METHOD(setHotLoadingEnabled : (BOOL)enabled)
   return @"DevMenu";
 }
 
-- (std::shared_ptr<facebook::react::TurboModule>)getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+- (std::shared_ptr<facebook::react::TurboModule>)
+    getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+                  nativeInvoker:(std::shared_ptr<facebook::react::CallInvoker>)nativeInvoker
+                     perfLogger:(id<RCTTurboModulePerformanceLogger>)perfLogger
 {
-  return std::make_shared<facebook::react::NativeDevMenuSpecJSI>(self, jsInvoker);
+  return std::make_shared<facebook::react::NativeDevMenuSpecJSI>(self, jsInvoker, nativeInvoker, perfLogger);
 }
 
 @end
@@ -667,6 +664,7 @@ RCT_EXPORT_METHOD(setHotLoadingEnabled : (BOOL)enabled)
 
 @end
 
-Class RCTDevMenuCls(void) {
+Class RCTDevMenuCls(void)
+{
   return RCTDevMenu.class;
 }

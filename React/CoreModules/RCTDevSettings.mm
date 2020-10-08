@@ -17,6 +17,7 @@
 #import <React/RCTProfile.h>
 #import <React/RCTReloadCommand.h>
 #import <React/RCTUtils.h>
+#import <React/RCTBundleURLProvider.h> // TODO(macOS ISS#2323203)
 
 #import <React/RCTDevMenu.h>
 
@@ -30,6 +31,7 @@ static NSString *const kRCTDevSettingIsDebuggingRemotely = @"isDebuggingRemotely
 static NSString *const kRCTDevSettingExecutorOverrideClass = @"executor-override";
 static NSString *const kRCTDevSettingShakeToShowDevMenu = @"shakeToShow";
 static NSString *const kRCTDevSettingIsPerfMonitorShown = @"RCTPerfMonitorKey";
+static NSString *const kRCTDevSettingSecondClickToShowDevMenu = @"secondClickToShow"; // TODO(macOS ISS#2323203)
 
 static NSString *const kRCTDevSettingsUserDefaultsKey = @"RCTDevMenu";
 
@@ -48,7 +50,8 @@ static BOOL devSettingsMenuEnabled = YES;
 static BOOL devSettingsMenuEnabled = NO;
 #endif
 
-void RCTDevSettingsSetEnabled(BOOL enabled) {
+void RCTDevSettingsSetEnabled(BOOL enabled)
+{
   devSettingsMenuEnabled = enabled;
 }
 
@@ -114,7 +117,7 @@ void RCTDevSettingsSetEnabled(BOOL enabled) {
 
 @end
 
-@interface RCTDevSettings () <RCTBridgeModule, RCTInvalidating> {
+@interface RCTDevSettings () <RCTBridgeModule, RCTInvalidating, NativeDevSettingsSpec> {
   BOOL _isJSLoaded;
 #if ENABLE_PACKAGER_CONNECTION
   RCTHandlerToken _reloadToken;
@@ -130,24 +133,25 @@ void RCTDevSettingsSetEnabled(BOOL enabled) {
 
 RCT_EXPORT_MODULE()
 
-+ (BOOL)requiresMainQueueSetup
-{
-  return YES; // RCT_DEV-only
-}
-
 - (instancetype)init
 {
-  // default behavior is to use NSUserDefaults
+  // Default behavior is to use NSUserDefaults with shake and hot loading enabled.
   NSDictionary *defaultValues = @{
 #if DEBUG // [TODO(OSS Candidate ISS#2710739)
     kRCTDevSettingDevModeEnabled: @YES,
 #endif // ]TODO(OSS Candidate ISS#2710739)
     kRCTDevSettingShakeToShowDevMenu : @YES,
     kRCTDevSettingHotLoadingEnabled : @YES,
+    kRCTDevSettingSecondClickToShowDevMenu: @YES, // TODO(macOS ISS#2323203)
   };
   RCTDevSettingsUserDefaultsDataSource *dataSource =
       [[RCTDevSettingsUserDefaultsDataSource alloc] initWithDefaultValues:defaultValues];
   return [self initWithDataSource:dataSource];
+}
+
++ (BOOL)requiresMainQueueSetup
+{
+  return NO;
 }
 
 - (instancetype)initWithDataSource:(id<RCTDevSettingsDataSource>)dataSource
@@ -181,11 +185,9 @@ RCT_EXPORT_MODULE()
 #endif
 
 #if RCT_ENABLE_INSPECTOR && !TARGET_OS_UIKITFORMAC && DEBUG // TODO(OSS Candidate ISS#2710739)
-  // we need this dispatch back to the main thread because even though this
-  // is executed on the main thread, at this point the bridge is not yet
-  // finished with its initialisation. But it does finish by the time it
-  // relinquishes control of the main thread, so only queue on the JS thread
-  // after the current main thread operation is done.
+  // We need this dispatch to the main thread because the bridge is not yet
+  // finished with its initialisation. By the time it relinquishes control of
+  // the main thread, this operation can be performed.
   dispatch_async(dispatch_get_main_queue(), ^{
     [bridge
         dispatchBlock:^{
@@ -214,7 +216,7 @@ RCT_EXPORT_MODULE()
 
 - (NSArray<NSString *> *)supportedEvents
 {
-  return @[@"didPressMenuItem"];
+  return @[ @"didPressMenuItem" ];
 }
 
 - (void)_updateSettingWithValue:(id)value forKey:(NSString *)key
@@ -267,14 +269,14 @@ RCT_EXPORT_METHOD(reload)
   RCTTriggerReloadCommandListeners(@"Unknown From JS");
 }
 
-RCT_EXPORT_METHOD(reloadWithReason : (NSString *) reason)
+RCT_EXPORT_METHOD(reloadWithReason : (NSString *)reason)
 {
   RCTTriggerReloadCommandListeners(reason);
 }
 
 RCT_EXPORT_METHOD(onFastRefresh)
 {
-    [self.bridge onFastRefresh];
+  [self.bridge onFastRefresh];
 }
 
 RCT_EXPORT_METHOD(setIsShakeToShowDevMenuEnabled : (BOOL)enabled)
@@ -287,7 +289,19 @@ RCT_EXPORT_METHOD(setIsShakeToShowDevMenuEnabled : (BOOL)enabled)
   return [[self settingForKey:kRCTDevSettingShakeToShowDevMenu] boolValue];
 }
 
-RCT_EXPORT_METHOD(setIsDebuggingRemotely : (BOOL)enabled)
+// [TODO(macOS ISS#2323203)
+RCT_EXPORT_METHOD(setIsSecondaryClickToShowDevMenuEnabled:(BOOL)enabled)
+{
+  [self _updateSettingWithValue:@(enabled) forKey:kRCTDevSettingSecondClickToShowDevMenu];
+}
+
+- (BOOL)isSecondaryClickToShowDevMenuEnabled
+{
+  return [[self settingForKey:kRCTDevSettingSecondClickToShowDevMenu] boolValue];
+}
+// ]TODO(macOS ISS#2323203)
+
+RCT_EXPORT_METHOD(setIsDebuggingRemotely:(BOOL)enabled)
 {
   [self _updateSettingWithValue:@(enabled) forKey:kRCTDevSettingIsDebuggingRemotely];
   [self _remoteDebugSettingDidChange];
@@ -371,12 +385,14 @@ RCT_EXPORT_METHOD(toggleElementInspector)
   }
 }
 
-RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
+RCT_EXPORT_METHOD(addMenuItem : (NSString *)title)
 {
   __weak __typeof(self) weakSelf = self;
-  [self.bridge.devMenu addItem:[RCTDevMenuItem buttonItemWithTitle:title handler:^{
-    [weakSelf sendEventWithName:@"didPressMenuItem" body:@{@"title": title}];
-  }]];
+  [self.bridge.devMenu addItem:[RCTDevMenuItem buttonItemWithTitle:title
+                                                           handler:^{
+                                                             [weakSelf sendEventWithName:@"didPressMenuItem"
+                                                                                    body:@{@"title" : title}];
+                                                           }]];
 }
 
 - (BOOL)isElementInspectorShown
@@ -411,8 +427,6 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
   }
 }
 
-#if RCT_DEV_MENU
-
 - (void)addHandler:(id<RCTPackagerClientMethod>)handler forPackagerMethod:(NSString *)name
 {
 #if ENABLE_PACKAGER_CONNECTION
@@ -420,7 +434,23 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
 #endif
 }
 
-#endif
+- (void)setupHotModuleReloadClientIfApplicableForURL:(NSURL *)bundleURL
+{
+  if (bundleURL && !bundleURL.fileURL) { // isHotLoadingAvailable check
+    NSString *const path = [bundleURL.path substringFromIndex:1]; // Strip initial slash.
+    NSString *const host = bundleURL.host;
+    NSNumber *const port = bundleURL.port;
+    // TODO(macOS ISS#2323203) - we could perhaps infer the platform from the bundleURL's query parameters, instead of hardcoding
+    if (self.bridge) {
+      [self.bridge enqueueJSCall:@"HMRClient"
+                          method:@"setup"
+                            args:@[ kRCTPlatformName, path, host, RCTNullIfNil(port), @(YES) ] // TODO(macOS ISS#2323203)
+                      completion:NULL];
+    } else {
+      self.invokeJS(@"HMRClient", @"setup", @[ kRCTPlatformName, path, host, RCTNullIfNil(port), @(YES) ]); // TODO(macOS ISS#2323203)
+    }
+  }
+}
 
 #pragma mark - Internal
 
@@ -455,9 +485,20 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
   });
 }
 
+- (std::shared_ptr<facebook::react::TurboModule>)
+    getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+                  nativeInvoker:(std::shared_ptr<facebook::react::CallInvoker>)nativeInvoker
+                     perfLogger:(id<RCTTurboModulePerformanceLogger>)perfLogger
+{
+  return std::make_shared<facebook::react::NativeDevSettingsSpecJSI>(self, jsInvoker, nativeInvoker, perfLogger);
+}
+
 @end
 
-#else // #if RCT_DEV
+#else // #if RCT_DEV_MENU
+
+@interface RCTDevSettings () <NativeDevSettingsSpec>
+@end
 
 @implementation RCTDevSettings
 
@@ -470,6 +511,10 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
   return NO;
 }
 - (BOOL)isRemoteDebuggingAvailable
+{
+  return NO;
+}
++ (BOOL)requiresMainQueueSetup
 {
   return NO;
 }
@@ -498,6 +543,9 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
 - (void)toggleElementInspector
 {
 }
+- (void)setupHotModuleReloadClientIfApplicableForURL:(NSURL *)bundleURL
+{
+}
 - (void)addMenuItem:(NSString *)title
 {
 }
@@ -505,9 +553,17 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
 {
 }
 
+- (std::shared_ptr<facebook::react::TurboModule>)
+    getTurboModuleWithJsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+                  nativeInvoker:(std::shared_ptr<facebook::react::CallInvoker>)nativeInvoker
+                     perfLogger:(id<RCTTurboModulePerformanceLogger>)perfLogger
+{
+  return std::make_shared<facebook::react::NativeDevSettingsSpecJSI>(self, jsInvoker, nativeInvoker, perfLogger);
+}
+
 @end
 
-#endif
+#endif // #if RCT_DEV_MENU
 
 @implementation RCTBridge (RCTDevSettings)
 
@@ -522,6 +578,7 @@ RCT_EXPORT_METHOD(addMenuItem:(NSString *)title)
 
 @end
 
-Class RCTDevSettingsCls(void) {
+Class RCTDevSettingsCls(void)
+{
   return RCTDevSettings.class;
 }

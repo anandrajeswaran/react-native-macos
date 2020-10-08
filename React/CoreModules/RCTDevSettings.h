@@ -59,6 +59,14 @@
  */
 @property (nonatomic, assign) BOOL isShakeToShowDevMenuEnabled;
 
+// [TODO(macOS ISS#2323203)
+/*
+ * Whether secondary click will show RCTDevMenu. The menu is enabled by default if RCT_DEV=1, but
+ * you may wish to disable it so that you can provide your own contextual menu.
+ */
+@property (nonatomic, assign) BOOL isSecondaryClickToShowDevMenuEnabled;
+// ]TODO(macOS ISS#2323203)
+
 /**
  * Whether performance profiling is enabled.
  */
@@ -68,11 +76,6 @@
  * Whether hot loading is enabled.
  */
 @property (nonatomic, assign, setter=setHotLoadingEnabled:) BOOL isHotLoadingEnabled;
-
-/**
- * Toggle the element inspector.
- */
-- (void)toggleElementInspector;
 
 /**
  * Enables starting of profiling sampler on launch
@@ -88,6 +91,16 @@
  * Whether the performance monitor is visible.
  */
 @property (nonatomic, assign) BOOL isPerfMonitorShown;
+
+/**
+ * Toggle the element inspector.
+ */
+- (void)toggleElementInspector;
+
+/**
+ * If loading bundle from metro, sets up HMRClient.
+ */
+- (void)setupHotModuleReloadClientIfApplicableForURL:(NSURL *)bundleURL;
 
 #if RCT_DEV_MENU
 - (void)addHandler:(id<RCTPackagerClientMethod>)handler

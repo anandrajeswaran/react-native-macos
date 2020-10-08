@@ -23,8 +23,15 @@ export interface Spec extends TurboModule {
   +toggleElementInspector: () => void;
   +addMenuItem: (title: string) => void;
 
+  // Events
+  +addListener: (eventName: string) => void;
+  +removeListeners: (count: number) => void;
+
   // iOS only.
   +setIsShakeToShowDevMenuEnabled: (enabled: boolean) => void;
+
+  // macOS only.
+  +setIsSecondaryClickToShowDevMenuEnabled: (enabled: boolean) => void; // TODO(macOS ISS#2323203)
 }
 
 export default (TurboModuleRegistry.getEnforcing<Spec>('DevSettings'): Spec);
